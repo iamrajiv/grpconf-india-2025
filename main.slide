@@ -1,0 +1,329 @@
+# Writing RESTful APIs Using gRPC-Gateway
+19th November 2025
+Tags: go, grpc, grpc-gateway
+Summary:
+
+Rajiv Ranjan Singh
+
+## Agenda
+
+- What is gRPC-Gateway
+- How gRPC-Gateway works
+- Ways to do gRPC Gateway HTTP Mapping
+- How to write simple hello world service using gRPC-Gateway
+- Advanced features gRPC-Gateway provides
+- Key Takeaways
+- References
+
+.image images/1.png 200 _
+
+: Hello everyone! Welcome to gRPConf India 2025! Today I'm going to talk about gRPC-Gateway, a powerful tool that bridges two worlds - gRPC and REST.
+: We'll explore how gRPC-Gateway lets us write our API code just once, and then serve it to both gRPC clients and RESTful HTTP clients at the same time.
+: This is a real game-changer for modern microservices architectures because you get the best of both worlds without writing duplicate code.
+
+## Speaker - Rajiv Ranjan Singh
+
+.link x.com/therajiv
+
+- Software Engineer (JL3) at **A.P. Moller Maersk**
+- Graduated from **JSSATE, Bengaluru, India**
+- **GSoC** 2022, **LFX Mentorship** 2021, and **GSoD** 2020 & 2021
+- Mentored in **GSoC** 2023, 2024, and 2025 with **Jenkins**
+- Previously worked with **Lummo**, **redBus**, and **Economize**
+
+: So, a bit about myself. I’m Rajiv, currently working as a Software Engineer at A.P. Moller Maersk at job level 3 in the Platform Engineering team in Bengaluru.
+: I mainly work on backend development in Go, building microservices and scaling infrastructure that supports Maersk’s global shipping operations.
+: I graduated from JSSATE, Bengaluru, with a degree in Information Science and Engineering.
+: I am an open-source enthusiast and actively participate in programs like Google Summer of Code, LFX Mentorship, and Season of Docs. I have also been mentoring in Google Summer of Code for the past three years with the Jenkins organization.
+: I have previously worked with companies such as Lummo, redBus, and Economize.
+: My journey with gRPC-Gateway began in 2020 when I was selected for Google Season of Docs to work on this very project. Since then, I’ve continued contributing to it and have also used it in production systems. Today, I’ll be sharing my learnings and practical insights from working with gRPC-Gateway.
+
+.image images/rajiv.png 250 _
+
+## What is gRPC-Gateway
+
+- A **protoc plugin** that generates a **reverse-proxy server** which translates RESTful HTTP API into gRPC
+
+- Generate REST API from protobuf definitions
+- Serve both gRPC and REST from the same service
+- Multiple ways todo https mappings
+- Automatic OpenAPI/Swagger documentation
+
+: So what exactly is gRPC-Gateway? It's a plugin for the Protocol Buffer compiler called protoc. This plugin reads your gRPC service definitions and automatically generates a reverse-proxy server for you.
+: Here's how it works - this reverse proxy sits in front of your gRPC service. When HTTP requests with JSON come in, the proxy translates them into gRPC calls.
+: The beautiful part is you only write your service definition once in a protobuf file, and you automatically get both gRPC and REST APIs.
+: Plus, it generates OpenAPI documentation for free, so you get interactive API docs without any extra work.
+: And this isn't just a toy project - many companies use gRPC-Gateway in production to serve millions of API requests every single day.
+
+.image images/2.png 250 _
+
+## How gRPC-Gateway works
+
+1. Client sends HTTP/JSON request
+2. gRPC-Gateway proxy receives request
+3. Proxy translates to gRPC call
+4. gRPC service processes request
+5. Response flows back through proxy
+6. Client receives HTTP/JSON response
+
+.image images/1.png 250 _
+
+: Now let's talk about how gRPC-Gateway actually works. Let me walk you through the complete lifecycle of a request.
+: When a REST client sends an HTTP request with JSON, it first hits the gRPC-Gateway proxy. This proxy knows exactly how to translate that REST call into a gRPC call because you've defined the mapping in your protobuf file using special annotations.
+: The proxy then forwards the gRPC request to your actual gRPC service - this is the same service that native gRPC clients talk to directly. Your service processes the request and sends back a gRPC response.
+: The proxy catches that response, translates it back to JSON format, and returns it to the REST client.
+: The brilliant part is this proxy can run in two modes - in-process for regular unary calls, which is really fast, or as a separate server for streaming use cases. For most applications, the in-process mode is perfect.
+
+## How gRPC-Gateway works
+
+.image images/3.svg 500 _
+
+## Ways to do gRPC Gateway HTTP Mapping
+
+- Method 1: Inline Annotations
+- Method 2: External gRPC API Configuration (YAML File)
+- Method 3: Unannotated Methods (Auto-generate)
+- Method 4: Multiple HTTP Bindings (Advanced)
+
+.image images/4.png 250 _
+
+: Now, there are 4 different ways to do HTTP mapping in gRPC-Gateway. But first, what is mapping? Mapping is simply telling the server how to convert gRPC requests to REST endpoints and vice versa.
+: Let's look at each method one by one.
+
+## Method 1: Inline Annotations
+
+.image images/inline.png 500 _
+
+: First is inline HTTP mapping where we update the main proto file which we created for the gRPC service. In the same proto file, we add HTTP annotations directly inside the RPC method definitions.
+: Here we imported google/api/annotations.proto, and then added the option (google.api.http) block inside our SayHello method.
+: In this annotation, we specified post: "/v1/hello" which means when someone makes a POST request to /v1/hello endpoint, it will call our SayHello gRPC method. The body: "\*" means the entire request body will be mapped to our SayHelloRequest message.
+: This way we can customize the HTTP method (GET, POST, PUT, DELETE), the URL path, query parameters, and how the request body maps to our protobuf messages - all directly in the proto file.
+
+## Method 2: External gRPC API Configuration (YAML File)
+
+.code examples/mapping/external.yaml
+
+: Second method is using an external YAML configuration file. The key benefit here is we don't touch or modify the original proto file at all - we keep it clean and pure gRPC.
+: Instead, we create a separate YAML file where we define all the HTTP mapping rules. In this file, we use the selector field to specify which gRPC method we want to map, like "hello.v1.GreeterService.SayHello".
+: Then we specify the HTTP method and path, just like in the inline approach - post: /v1/hello and body: "\*". This YAML file is passed to the grpc-gateway plugin during code generation using the --grpc_api_configuration flag.
+: This approach is great when you want to keep your proto files framework-agnostic, or when you're working with proto files you don't own or can't modify. You still get full customization of endpoints, methods, and body mappings.
+
+## Method 3: Unannotated Methods (Auto-generate)
+
+- No annotations or YAML files needed
+- Auto-generates endpoints based on service/method names
+- Best for quick prototyping and internal APIs
+
+: Third method is the unannotated or auto-generation approach. This is the simplest but least flexible option - you literally do nothing. No annotations, no YAML files, nothing.
+: When grpc-gateway sees a method without any HTTP annotations, it automatically generates REST endpoints based on a default pattern. The endpoints follow a convention based on your service and method names.
+: For example, our SayHello method might get auto-mapped to something like POST /hello.v1.GreeterService/SayHello. The exact format depends on the generator settings.
+: This is perfect for quick prototyping or internal APIs where you don't care about the exact URL structure. But for production APIs with specific REST conventions, you'll want to use one of the other methods for full control.
+
+## Method 4: Multiple HTTP Bindings (Advanced)
+
+.image images/multiple.png 500 _
+
+: Fourth method is the advanced approach using multiple HTTP bindings. This is really powerful - it lets you expose the same gRPC method through multiple different REST endpoints.
+: We use the additional_bindings feature inside the google.api.http annotation. In our example, the SayHello method can be called three different ways: POST /v1/hello with a JSON body, GET /v1/hello/{name} with the name in the URL path, or POST /v1/greet with a JSON body.
+: All three endpoints call the exact same gRPC method! This is incredibly useful for API versioning, supporting legacy endpoints, or providing multiple ways to call the same functionality for different client preferences.
+: You might use GET for simple lookups, POST for creating resources, or provide both for backwards compatibility. The flexibility here is amazing - one implementation, multiple REST APIs.
+
+## How to write simple hello world service using gRPC-Gateway
+
+- Define gRPC service in proto file
+- Add HTTP annotations for REST mapping
+- Generate code stubs using buf
+- Implement and run both gRPC and REST servers
+
+: Now let's build a simple hello world service using gRPC-Gateway. For this demo, I already have some basic code for a gRPC hello service.
+: It's a simple Greeter service with just one SayHello method. This method takes a name as input and returns a greeting message.
+: What we're going to do now is update this gRPC service to also support REST using gRPC-Gateway.
+: Now, I'm a big fan of Buf. Buf is a modern tooling ecosystem that helps with code generation from proto files, linting, and much more. It's way better than using raw protoc commands.
+: Of course, you can still use the protocol buffer compiler protoc directly if you prefer, but I'll be using Buf for this demo.
+: So here's our plan - First, we'll update our proto file to add HTTP annotations. I'm going to use the inline HTTP mapping approach we just discussed.
+: Second, since gRPC-Gateway needs some additional dependencies, we'll update our Buf configuration files to include those.
+: Third, we'll run the command "buf generate" to generate all the code stubs we need.
+: After generation, we'll see three types of generated files - hello.pb.go which contains our Protocol Buffer message definitions, hello_grpc.pb.go which has the gRPC service code, and hello.pb.gw.go which is the gRPC-Gateway reverse proxy code.
+: Finally, we'll update our main.go file to run both the gRPC server and the gRPC-Gateway server together.
+: Once we're done, our service will support both native gRPC calls and REST HTTP calls using the exact same business logic!
+
+## Step 1: Define the Service (proto/hello.proto)
+
+.image images/inline.png 500 _
+
+: Let's look at our protobuf definition. At the top, we specify we're using proto3 syntax and define our package name as hello.v1. The go_package option tells the code generator where to place the generated Go files.
+: Now here's the key part - we import google/api/annotations.proto. This import is what enables gRPC-Gateway functionality.
+: Notice the option block inside our SayHello RPC method? That's the HTTP annotation that maps this gRPC method to a REST endpoint.
+: What we're saying here is - when someone makes a POST request to the /v1/hello URL, call this SayHello method. The body: "\*" means take the entire HTTP request body and map it to the SayHelloRequest message.
+: This is very powerful - you can customize everything: the HTTP method, the URL path, query parameters, and exactly how the request maps to your protobuf messages.
+: The message definitions are simple - SayHelloRequest contains just a name field, and SayHelloResponse returns a message field. In real applications these would be more complex, but the principle remains exactly the same.
+
+## Step 2: Configure buf (buf.yaml)
+
+.code examples/hello/buf.yaml
+
+: This is our Buf configuration file called buf.yaml. This is where we configure how Buf works with our project.
+: We're telling Buf that our proto files are located in the proto directory. We've also enabled standard linting rules to keep our proto files clean, and we've turned on breaking change detection.
+: The really important part here is the dependencies section. We've added googleapis as a dependency. This dependency provides the google/api/annotations.proto file that we imported in our proto file.
+: The beautiful thing is Buf handles downloading and managing all these dependencies automatically - you don't have to manually download anything.
+: With this configuration in place, generating all our code becomes as simple as running one command - "buf generate".
+
+## Step 3: Configure Code Generation (buf.gen.yaml)
+
+.code examples/hello/buf.gen.yaml
+
+: This is our buf.gen.yaml file. This file tells Buf exactly how to generate code from our proto files.
+: We're using three plugins here. The best part? All these plugins are pulled remotely from buf.build, so we don't need to install anything locally on our machine.
+: The first plugin is protocolbuffers/go - this generates our Protocol Buffer message types in Go.
+: The second plugin is grpc/go - this generates the gRPC client and server code.
+: And here's the magic - the third plugin is grpc-ecosystem/gateway. This generates the REST proxy code that translates HTTP requests to gRPC calls.
+: All these plugins use the paths=source_relative option, which means the generated files will be placed right next to their source proto files, keeping our project nicely organized.
+
+## Step 4: Implement the Server (main.go)
+
+.code examples/hello/main.go /type server/,/^}/
+
+: Now let's implement our actual server in Go. Our server struct is very simple - it embeds the UnimplementedGreeterServiceServer.
+: This embedding is a Go best practice for gRPC services. It ensures that if new methods are added to the service definition in the future, our existing code won't break.
+: The SayHello implementation is straightforward. It takes a context and a SayHelloRequest, and returns a SayHelloResponse. We're simply formatting a greeting message with the name provided in the request.
+: Notice how type-safe this code is - we can't accidentally misspell field names or use the wrong types. The Go compiler catches all of that for us at compile time.
+
+## Step 5: Start gRPC Server
+
+.code examples/hello/main.go /func runGRPCServer/,/^}/
+
+: Now let's start our gRPC server. This runGRPCServer function sets up a standard gRPC server.
+: First, we create a TCP listener on port 50051. Port 50051 is the conventional port used for gRPC services.
+: Then we create a new gRPC server instance and register our GreeterService implementation with it. We also register the gRPC reflection service, which allows tools like grpcurl to discover and call our service.
+: Finally, we call Serve which starts accepting incoming gRPC connections. This is a blocking call, so the server will run until we stop it.
+: The important thing to note is this is a pure gRPC server - it only speaks the gRPC protocol. But as we'll see in the next step, we can add REST support without changing any of this gRPC code.
+
+## Step 6: Start REST Gateway
+
+.code examples/hello/main.go /func runRESTGateway/,/^}/
+
+: And here's where the magic happens - our runRESTGateway function starts the gRPC-Gateway reverse proxy.
+: First, we create a ServeMux from the grpc-gateway runtime package. This is similar to Go's standard http.ServeMux but it's specialized for gRPC-Gateway.
+: Then we call RegisterGreeterServiceHandlerFromEndpoint - this function was automatically generated by the grpc-gateway plugin from our proto file. We tell it to forward all HTTP requests to our gRPC server running on localhost port 50051.
+: Finally, we start a standard HTTP server on port 8080 to handle incoming REST requests.
+: Now we have two servers running - the gRPC server on port 50051 and the REST gateway on port 8080. Both are talking to the exact same service implementation!
+: Note that we're using insecure credentials here which is fine for local development and demos. In production, you would definitely use proper TLS certificates.
+
+## Testing the Service
+
+**gRPC Client Test:**
+
+```bash
+grpcurl -plaintext \
+  -d '{"name": "gRPConf"}' localhost:50051 hello.v1.GreeterService/SayHello
+```
+
+**REST Client Test:**
+
+```bash
+curl -X POST http://localhost:8080/v1/hello \
+  -H "Content-Type: application/json" -d '{"name": "gRPConf"}'
+```
+
+**Both Return:**
+
+```json
+{
+  "message": "Hello, gRPConf!"
+}
+```
+
+: Now let's test our service to see both endpoints working! For testing the gRPC endpoint, we can use a tool called grpcurl - think of it as curl but for gRPC.
+: We send a JSON payload with the name "gRPConf" to our SayHello method on port 50051. Thanks to gRPC reflection that we registered earlier, grpcurl can discover our service automatically.
+: For testing the REST endpoint, we use regular curl that everyone knows. We make a POST request to /v1/hello on port 8080 with the same JSON payload.
+: Notice that the URL path /v1/hello matches exactly what we defined in our google.api.http annotation in the proto file.
+: And here's the beautiful part - both calls return the exact same response: "Hello, gRPConf!" Why? Because both are calling the same SayHello implementation in our code!
+: One request went through the gRPC protocol, the other through HTTP with JSON, but they both executed the exact same business logic. This is the power of gRPC-Gateway - write your code once, serve it both ways!
+
+## Advanced features gRPC-Gateway provides
+
+- Custom HTTP Mapping
+- Streaming Support
+- Error Handling
+
+.image images/5.png 250 _
+
+## Advanced features gRPC-Gateway provides - Custom HTTP Mapping
+
+.image images/custom-mapping.png 500 _
+
+: First advanced feature is Custom HTTP Mapping. This is super powerful - you can build REST APIs that look and feel exactly like traditional REST APIs, but are powered by gRPC underneath.
+: For example, you can use path parameters like /v1/users/{user_id} where user_id gets automatically extracted from the URL. This is common in REST APIs - like when you do GET /users/123 to get user with ID 123.
+: You can also control what goes in the request body versus what comes from the URL. For instance, when updating a user, the user ID comes from the path /users/123, but the updated user data comes from the JSON body.
+: You can map all the standard REST HTTP methods - GET for reading, POST for creating, PUT or PATCH for updating, and DELETE for removing. This means your API follows REST best practices while still being gRPC under the hood. It's the best of both worlds!
+
+## Advanced features gRPC-Gateway provides - Streaming Support
+
+```protobuf
+service GreeterService {
+  rpc StreamGreetings(StreamRequest) returns (stream HelloResponse) {
+    option (google.api.http) = {
+      get: "/v1/greetings/stream"
+    };
+  }
+}
+```
+
+**Returns:** Server-Sent Events (SSE) over HTTP
+
+: Second advanced feature is Streaming Support. Think about scenarios where you need real-time updates - like a chat application, live sports scores, or stock price updates that keep changing.
+: gRPC has built-in support for streaming data. When you define a streaming RPC in your proto file, gRPC-Gateway automatically converts this to Server-Sent Events for HTTP clients. Server-Sent Events, or SSE, is a technology that lets servers push updates to browsers in real-time.
+: So your gRPC clients can use efficient bidirectional streaming, while your web browsers and REST clients automatically get SSE - which is natively supported in all modern browsers. You write the streaming logic once, and it works for both!
+: This is perfect for real-time notifications, live dashboards, progress updates for long-running tasks, or any scenario where the server needs to push data to clients as it becomes available.
+
+## Advanced features gRPC-Gateway provides - Error Handling
+
+.code examples/advanced/error-handling.go /func.*GetUser/,/^}/
+
+## Advanced features gRPC-Gateway provides - Error Handling
+
+**Translation:**
+
+- `codes.NotFound` → HTTP 404
+- `codes.InvalidArgument` → HTTP 400
+- `codes.Internal` → HTTP 500
+
+: Third advanced feature is Error Handling. When things go wrong in your application, you need to tell the client what happened in a way they understand.
+: gRPC has its own error codes like NotFound, InvalidArgument, or Internal. HTTP has different status codes like 404 for Not Found, 400 for Bad Request, or 500 for Internal Server Error.
+: The beautiful thing is gRPC-Gateway automatically translates between these! When you return a gRPC NotFound error in your code, gRPC clients get the proper gRPC status code, but REST clients automatically get HTTP 404. Same error, different representation.
+: This means you write your error handling once using gRPC status codes, and each client type - whether gRPC or REST - gets errors in the format they expect. The error messages are preserved too, so everyone gets meaningful error information. It just works!
+
+## Key Takeaways
+
+- gRPC-Gateway bridges gRPC and REST automatically
+- Write your service once, serve both protocols
+- Internal services get gRPC performance
+- External clients get REST compatibility
+- Free OpenAPI documentation
+- Production-ready and battle-tested
+- Huge time-saver for API development
+
+: Let me quickly summarize the key takeaways from today's talk.
+: gRPC-Gateway is a powerful tool that lets you write your service definition just once in a proto file, and automatically serve both gRPC and REST protocols from that single definition.
+: This means your internal microservices can communicate using gRPC for maximum performance and efficiency, while your external clients - like web browsers and mobile apps - can use familiar REST APIs with JSON.
+: And you get OpenAPI documentation generated for free, which is great for API consumers.
+: This isn't some experimental or toy technology - gRPC-Gateway is battle-tested and used in production by many companies serving millions of API requests every single day.
+: Most importantly, it's a massive time-saver. Instead of maintaining two completely separate API implementations that can easily drift apart and cause bugs, you maintain just one protobuf definition and let the tools handle all the translation work for you.
+
+## References
+
+- github.com/grpc-ecosystem/grpc-gateway
+- grpc-ecosystem.github.io
+- github.com/iamrajiv/grpconf-india-2025
+- protobuf.dev
+- grpc.io
+- buf.build
+
+.image images/qr.png 250 _
+
+: Before we wrap up, here are all the resources and references for diving deeper into gRPC-Gateway.
+: The official gRPC-Gateway GitHub repository has excellent documentation and many examples you can learn from.
+: All the code from today's demo, including the slides themselves, is available in my GitHub repository at github.com/iamrajiv/grpconf-india-2025.
+: For learning more about Protocol Buffers and gRPC fundamentals, check out the official documentation at protobuf.dev and grpc.io.
+: And if you want to use Buf like we did today, visit buf.build for their excellent documentation.
+: Thank you so much for your attention! I'm happy to take any questions you might have about gRPC-Gateway or anything we covered today.
