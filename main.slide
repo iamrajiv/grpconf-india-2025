@@ -287,6 +287,11 @@ service GreeterService {
 
 .code examples/advanced/error-handling.go /func.*GetUser/,/^}/
 
+: Third advanced feature is Error Handling. When things go wrong in your application, you need to tell the client what happened in a way they understand.
+: gRPC has its own error codes like NotFound, InvalidArgument, or Internal. HTTP has different status codes like 404 for Not Found, 400 for Bad Request, or 500 for Internal Server Error.
+: The beautiful thing is gRPC-Gateway automatically translates between these! When you return a gRPC NotFound error in your code, gRPC clients get the proper gRPC status code, but REST clients automatically get HTTP 404. Same error, different representation.
+: This means you write your error handling once using gRPC status codes, and each client type - whether gRPC or REST - gets errors in the format they expect. The error messages are preserved too, so everyone gets meaningful error information. It just works!
+
 ## Advanced features gRPC-Gateway provides - Error Handling
 
 **Translation:**
@@ -294,11 +299,6 @@ service GreeterService {
 - `codes.NotFound` → HTTP 404
 - `codes.InvalidArgument` → HTTP 400
 - `codes.Internal` → HTTP 500
-
-: Third advanced feature is Error Handling. When things go wrong in your application, you need to tell the client what happened in a way they understand.
-: gRPC has its own error codes like NotFound, InvalidArgument, or Internal. HTTP has different status codes like 404 for Not Found, 400 for Bad Request, or 500 for Internal Server Error.
-: The beautiful thing is gRPC-Gateway automatically translates between these! When you return a gRPC NotFound error in your code, gRPC clients get the proper gRPC status code, but REST clients automatically get HTTP 404. Same error, different representation.
-: This means you write your error handling once using gRPC status codes, and each client type - whether gRPC or REST - gets errors in the format they expect. The error messages are preserved too, so everyone gets meaningful error information. It just works!
 
 ## Key Takeaways
 
