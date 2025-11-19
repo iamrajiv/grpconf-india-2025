@@ -269,12 +269,19 @@ service GreeterService {
 }
 ```
 
-**Returns:** Server-Sent Events (SSE) over HTTP
+**Returns:** NDJSON (newline-delimited JSON) streaming over HTTP using chunked transfer encoding
 
-: Second advanced feature is Streaming Support. Think about scenarios where you need real-time updates - like a chat application, live sports scores, or stock price updates that keep changing.
-: gRPC has built-in support for streaming data. When you define a streaming RPC in your proto file, gRPC-Gateway automatically converts this to Server-Sent Events for HTTP clients. Server-Sent Events, or SSE, is a technology that lets servers push updates to browsers in real-time.
-: So your gRPC clients can use efficient bidirectional streaming, while your web browsers and REST clients automatically get SSE - which is natively supported in all modern browsers. You write the streaming logic once, and it works for both!
-: This is perfect for real-time notifications, live dashboards, progress updates for long-running tasks, or any scenario where the server needs to push data to clients as it becomes available.
+**Streaming Support:**
+- Server-side streaming → NDJSON over HTTP (each gRPC message → JSON → flushed immediately)
+- Client-side streaming → gRPC native clients only (REST cannot stream requests)
+- Bidirectional streaming → gRPC native clients only (requires HTTP/2 duplex)
+
+: Second advanced feature is Streaming Support. Think about scenarios where you need real-time updates - like live logs, monitoring dashboards, stock price updates, or long-running job progress.
+: gRPC has built-in streaming support. When we define a server-side streaming RPC in proto, gRPC-Gateway exposes it to REST clients as chunked JSON streaming using NDJSON format. Each message is sent as its own chunk using Transfer-Encoding: chunked.
+: This works perfectly in curl, Postman, terminal tools, Node/Python/Go REST clients, and browser fetch API with ReadableStream. The Gateway flushes each JSON object immediately - like {"message":"hi"}, then {"message":"hello again"}, and so on.
+: gRPC native clients get full streaming capabilities - unary, server-side, client-side, and bidirectional. REST clients only receive server-side streaming because HTTP/1.1 cannot support client-streaming or bidirectional streaming. This is a protocol limitation, not a gRPC-Gateway limitation.
+: Important note - if you specifically want SSE format with "data:" prefixes and Content-Type: text/event-stream, you need to manually wrap the Gateway chunks. By default, it outputs NDJSON which works great for most real-time use cases.
+: So the big benefit is write streaming once, and gRPC gets full streaming while REST clients get real-time updates too. This is perfect for real-time dashboards, analytics streams, monitoring systems, and any scenario where the server needs to push data to clients as it becomes available.
 
 ## Advanced features gRPC-Gateway provides - Error Handling
 
